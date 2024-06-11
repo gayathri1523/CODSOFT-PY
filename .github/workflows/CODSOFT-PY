@@ -1,0 +1,50 @@
+import pandas as pd
+
+# Load the MovieLens dataset
+movies = pd.read_csv('movies.csv')
+ratings = pd.read_csv('ratings.csv')
+
+# Merge movies and ratings data
+movie_ratings = pd.merge(movies, ratings, on='movieId')
+
+# Create a user-item matrix
+user_movie_matrix = movie_ratings.pivot_table(index='userId', columns='title', values='rating')
+
+# Fill NaN values with 0
+user_movie_matrix = user_movie_matrix.fillna(0)
+
+# Calculate similarity between users
+from sklearn.metrics.pairwise import cosine_similarity
+
+user_similarity = cosine_similarity(user_movie_matrix)
+
+# Function to get similar users
+def similar_users(user_id, matrix, similarity):
+    user_vector = matrix.loc[user_id].values.reshape(1, -1)
+    similarities = cosine_similarity(user_vector, matrix)
+    similar_users = pd.DataFrame(similarities, columns=matrix.index)
+    similar_users = similar_users.transpose()
+    similar_users.columns = ['similarity']
+    similar_users = similar_users.sort_values(by='similarity', ascending=False)
+    similar_users = similar_users.drop(index=user_id)
+    return similar_users
+
+# Function to recommend movies
+def recommend_movies(user_id, matrix, similarity, n=5):
+    similar = similar_users(user_id, matrix, similarity)
+    user_movies = matrix.loc[user_id]
+    recommendations = []
+    for sim_user, _ in similar.iterrows():
+        sim_user_movies = matrix.loc[sim_user]
+        for movie, rating in sim_user_movies.iteritems():
+            if movie not in user_movies.index and rating > 0:
+                recommendations.append((movie, rating))
+    recommendations.sort(key=lambda x: x[1], reverse=True)
+    return recommendations[:n]
+
+# Example usage
+user_id = 1
+recommended_movies = recommend_movies(user_id, user_movie_matrix, user_similarity)
+print(f"Top 5 recommended movies for user {user_id}:")
+for movie, _ in recommended_movies:
+    print(movie)
